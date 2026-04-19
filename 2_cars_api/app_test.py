@@ -72,3 +72,27 @@ def test_create_model(client):
     data = response.get_json()
     assert data['number_of_vehicles'] == 1
     assert data['car_info'] == {'bentz': {'0': model}}
+
+
+def test_pagination(client):
+    """페이지네이션이 올바르게 동작하는지 확인합니다.
+    브랜드 3개를 만들고 size=2 로 나눠서 조회합니다."""
+    # 브랜드 3개 생성
+    client.post(f"/{NS}/brand_a", data={})
+    client.post(f"/{NS}/brand_b", data={})
+    client.post(f"/{NS}/brand_c", data={})
+
+    # 1페이지: brand_a, brand_b
+    response = client.get(f"/{NS}/?page=1&size=2")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data['total'] == 3
+    assert data['page'] == 1
+    assert data['size'] == 2
+    assert len(data['car_info']) == 2
+
+    # 2페이지: brand_c
+    response = client.get(f"/{NS}/?page=2&size=2")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert len(data['car_info']) == 1

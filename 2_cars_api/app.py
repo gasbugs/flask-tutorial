@@ -47,15 +47,33 @@ class Cars(Resource):
     """전체 자동차 목록을 관리하는 API 클래스입니다."""
 
     def get(self):
-        """등록된 모든 자동차 정보와 총 대수를 조회합니다. (GET /cars)"""
-        # 전체 차량 수를 계산합니다. (모든 브랜드의 모델 수 합산)
+        """등록된 자동차 정보를 페이지 단위로 조회합니다.
+        쿼리 파라미터: page(페이지 번호, 기본값 1), size(페이지당 항목 수, 기본값 10)
+        예시: GET /cars?page=2&size=5"""
+        # request.args.get: URL 뒤 ?key=value 형태의 값을 읽어옵니다.
+        page = request.args.get('page', 1, type=int)   # 기본값: 1페이지
+        size = request.args.get('size', 10, type=int)  # 기본값: 10개
+
+        all_brands = list(car_info.keys())
+        total = len(all_brands)
+
+        # 슬라이싱으로 해당 페이지의 브랜드만 추출합니다.
+        # 예: page=2, size=5 → [5:10]
+        start = (page - 1) * size
+        end = start + size
+        paged_brands = all_brands[start:end]
+        paged_info = {brand: car_info[brand] for brand in paged_brands}
+
+        # 전체 차량 수는 페이지 관계없이 전체 기준으로 계산합니다.
         count = sum(len(models) for models in car_info.values())
 
-        # 응답 형식: dict와 HTTP 상태코드를 함께 반환합니다.
         return {
             'message': 'ok',
-            'number_of_vehicles': count,  # 총 차량 수
-            'car_info': car_info           # 전체 데이터
+            'number_of_vehicles': count,
+            'total': total,
+            'page': page,
+            'size': size,
+            'car_info': paged_info
         }, 200
 
 
