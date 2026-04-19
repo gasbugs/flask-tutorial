@@ -136,9 +136,9 @@ class BrandDetail(Resource):
         del car_info[brand]
         return '', 204
 
-    def put(self, brand):
+    def put(self, brand):  # noqa: ARG002
         """브랜드 이름 변경 — 실습 과제: 직접 구현해보세요.
-        힌트: body에서 new_name을 읽어 car_info의 키를 변경합니다."""
+        힌트: body에서 new_name을 읽어 car_info[brand]의 키를 변경합니다."""
         # TODO(실습): body의 name으로 브랜드 이름을 변경하는 기능을 구현하세요.
         return k8s_error("Not implemented", 501)
 

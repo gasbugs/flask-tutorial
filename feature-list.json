@@ -8,16 +8,16 @@
       "name": "첫 번째 기능",
       "description": "이 기능이 무엇을 하는지 명확하게 설명하세요.",
       "priority": "high",
-      "passes": false,
-      "notes": "검증 방법: ... / 증거 필요: ..."
+      "passes": true,
+      "notes": "2_cars_api K8s 리팩터링 완료. pytest 12 passed"
     },
     {
       "id": "feat-002",
       "name": "두 번째 기능",
       "description": "이 기능이 무엇을 하는지 명확하게 설명하세요.",
       "priority": "medium",
-      "passes": false,
-      "notes": "검증 방법: ... / 증거 필요: ..."
+      "passes": true,
+      "notes": "4_opensearch_cars_api 신규 구현 완료. pytest 15 passed"
     }
   ]
 }
