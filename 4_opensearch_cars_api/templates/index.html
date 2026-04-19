@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+{% block title %}차량 관리{% endblock %}
+{% block content %}
+<h1>차량 관리</h1>
+
+<h2>브랜드 목록</h2>
+<div class="brand-list">
+  {% for b in brands %}
+    <a href="/ui/?brand={{ b }}"
+       class="brand-btn {% if b == selected_brand %}active{% endif %}">{{ b }}</a>
+  {% else %}
+    <p>등록된 브랜드가 없습니다.</p>
+  {% endfor %}
+</div>
+
+<form class="add-form" method="post" action="/ui/brands/create">
+  <input type="text" name="name" placeholder="새 브랜드 이름" required>
+  <button type="submit">브랜드 추가</button>
+</form>
+
+{% if selected_brand %}
+<hr>
+<h2>{{ selected_brand }} — 모델 목록</h2>
+
+{% if models %}
+<table>
+  <tr>
+    <th>ID</th><th>모델명</th><th>가격</th>
+    <th>연료</th><th>연비</th><th>엔진출력</th><th>실린더</th><th>삭제</th>
+  </tr>
+  {% for m in models %}
+  <tr>
+    <td>{{ m.model_id }}</td>
+    <td>{{ m.name }}</td>
+    <td>{{ m.price | int | string }}원</td>
+    <td>{{ m.fuel_type }}</td>
+    <td>{{ m.fuel_efficiency }}</td>
+    <td>{{ m.engine_power }}</td>
+    <td>{{ m.engine_cylinder }}</td>
+    <td>
+      <form class="inline" method="post"
+            action="/ui/brands/{{ selected_brand }}/models/{{ m.model_id }}/delete">
+        <button class="small" type="submit">삭제</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p>등록된 모델이 없습니다.</p>
+{% endif %}
+
+<h3>모델 추가</h3>
+<form class="add-form"
+      method="post" action="/ui/brands/{{ selected_brand }}/models/create">
+  <input type="number" name="model_id" placeholder="ID" required style="width:60px">
+  <input type="text"   name="name"     placeholder="모델명" required>
+  <input type="number" name="price"    placeholder="가격" required style="width:100px">
+  <input type="text"   name="fuel_type"       placeholder="연료종류" required>
+  <input type="text"   name="fuel_efficiency"  placeholder="연비" required>
+  <input type="text"   name="engine_power"     placeholder="엔진출력" required>
+  <input type="text"   name="engine_cylinder"  placeholder="실린더" required>
+  <button type="submit">추가</button>
+</form>
+{% endif %}
+{% endblock %}

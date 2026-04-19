@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+{% block title %}차량 검색{% endblock %}
+{% block content %}
+<h1>차량 검색</h1>
+<p>모델명, 브랜드, 연료종류, 실린더 구성으로 검색할 수 있습니다.</p>
+
+<form class="search-form" method="get" action="/ui/search">
+  <input type="text" name="q" value="{{ q }}" placeholder="예: e-class, gasoline, I6">
+  <button type="submit">검색</button>
+</form>
+
+{% if q %}
+  {% if results %}
+  <p><strong>{{ results | length }}건</strong> 검색됨 — 키워드: <em>{{ q }}</em></p>
+  <table>
+    <tr>
+      <th>브랜드</th><th>ID</th><th>모델명</th><th>가격</th>
+      <th>연료</th><th>연비</th><th>엔진출력</th><th>실린더</th>
+    </tr>
+    {% for r in results %}
+    <tr>
+      <td>{{ r.brand }}</td>
+      <td>{{ r.model_id }}</td>
+      <td>{{ r.name }}</td>
+      <td>{{ r.price | int | string }}원</td>
+      <td>{{ r.fuel_type }}</td>
+      <td>{{ r.fuel_efficiency }}</td>
+      <td>{{ r.engine_power }}</td>
+      <td>{{ r.engine_cylinder }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p>검색 결과가 없습니다.</p>
+  {% endif %}
+{% endif %}
+{% endblock %}
