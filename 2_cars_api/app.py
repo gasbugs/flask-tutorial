@@ -16,8 +16,8 @@ app = Flask(__name__)
 api = Api(app)  # Api 객체가 Swagger 문서를 자동 생성합니다.
 
 # namespace(이름공간)는 관련된 API를 하나의 그룹으로 묶어주는 역할입니다.
-# 모든 URL 앞에 '/ns_cars'가 붙습니다. 예: /ns_cars/cars
-ns_cars = api.namespace('ns_cars', description='Car APIs')
+# 모든 URL 앞에 '/cars'가 붙습니다. 예: /cars/bentz
+cars_ns = api.namespace('cars', description='Car APIs')
 
 # API가 받을 요청 데이터의 형태(스키마)를 정의합니다.
 # 이 정의는 Swagger 문서에도 자동으로 표시됩니다.
@@ -42,12 +42,12 @@ car_data = api.model(
 car_info = {}
 
 
-@ns_cars.route('/cars')
+@cars_ns.route('/')
 class Cars(Resource):
     """전체 자동차 목록을 관리하는 API 클래스입니다."""
 
     def get(self):
-        """등록된 모든 자동차 정보와 총 대수를 조회합니다. (GET /ns_cars/cars)"""
+        """등록된 모든 자동차 정보와 총 대수를 조회합니다. (GET /cars)"""
         # 전체 차량 수를 계산합니다. (모든 브랜드의 모델 수 합산)
         count = 0
         for _, models in car_info.items():
@@ -59,12 +59,12 @@ class Cars(Resource):
         }
 
 
-@ns_cars.route('/cars/<string:brand>')
+@cars_ns.route('/<string:brand>')
 class CarsBrand(Resource):
     """특정 브랜드 정보를 관리하는 API 클래스입니다."""
 
     def get(self, brand):
-        """특정 브랜드의 차량 목록을 조회합니다. (GET /ns_cars/cars/브랜드명)"""
+        """특정 브랜드의 차량 목록을 조회합니다. (GET /cars/브랜드명)"""
         # 요청한 브랜드가 없으면 404 에러를 반환합니다.
         if brand not in car_info:
             abort(404, description=f"Brand {brand} doesn't exist")
@@ -76,7 +76,7 @@ class CarsBrand(Resource):
         }
 
     def post(self, brand):
-        """새로운 브랜드를 등록합니다. (POST /ns_cars/cars/브랜드명)"""
+        """새로운 브랜드를 등록합니다. (POST /cars/브랜드명)"""
         # 이미 존재하는 브랜드면 409(중복) 에러를 반환합니다.
         if brand in car_info:
             abort(409, description=f"Brand {brand} already exists")
@@ -86,7 +86,7 @@ class CarsBrand(Resource):
         return Response(status=201)  # 201: 생성 성공을 의미하는 HTTP 상태코드
 
     def delete(self, brand):
-        """특정 브랜드와 해당 브랜드의 모든 모델을 삭제합니다. (DELETE /ns_cars/cars/브랜드명)"""
+        """특정 브랜드와 해당 브랜드의 모든 모델을 삭제합니다. (DELETE /cars/브랜드명)"""
         if brand not in car_info:
             abort(404, description=f"Brand {brand} doesn't exists")
 
@@ -94,17 +94,17 @@ class CarsBrand(Resource):
         return Response(status=200)  # 200: 성공을 의미하는 HTTP 상태코드
 
     def put(self, brand):
-        """브랜드 이름을 변경합니다. (PUT /ns_cars/cars/브랜드명) - 미구현"""
+        """브랜드 이름을 변경합니다. (PUT /cars/브랜드명) - 미구현"""
         # todo something
         return Response(status=200)
 
 
-@ns_cars.route('/cars/<string:brand>/<int:model_id>')
+@cars_ns.route('/<string:brand>/<int:model_id>')
 class CarsBrandModel(Resource):
     """특정 브랜드의 개별 모델을 관리하는 API 클래스입니다."""
 
     def get(self, brand, model_id):
-        """특정 브랜드의 특정 모델을 조회합니다. (GET /ns_cars/cars/브랜드명/모델ID)"""
+        """특정 브랜드의 특정 모델을 조회합니다. (GET /cars/브랜드명/모델ID)"""
         # 브랜드가 없거나 모델이 없으면 404 에러를 반환합니다.
         if brand not in car_info:
             abort(404, description=f"Brand {brand} doesn't exists")
@@ -118,7 +118,7 @@ class CarsBrandModel(Resource):
 
     @api.expect(car_data)  # 요청 바디가 car_data 스키마를 따라야 한다는 것을 Swagger에 표시합니다.
     def post(self, brand, model_id):
-        """특정 브랜드에 새 모델을 추가합니다. (POST /ns_cars/cars/브랜드명/모델ID)"""
+        """특정 브랜드에 새 모델을 추가합니다. (POST /cars/브랜드명/모델ID)"""
         if brand not in car_info:
             abort(404, description=f"Brand {brand} doesn't exists")
         if model_id in car_info[brand]:
@@ -131,7 +131,7 @@ class CarsBrandModel(Resource):
         return Response(status=201)
 
     def delete(self, brand, model_id):
-        """특정 모델을 삭제합니다. (DELETE /ns_cars/cars/브랜드명/모델ID)"""
+        """특정 모델을 삭제합니다. (DELETE /cars/브랜드명/모델ID)"""
         if brand not in car_info:
             abort(404, description=f"Brand {brand} doesn't exists")
         if model_id not in car_info[brand]:
@@ -143,7 +143,7 @@ class CarsBrandModel(Resource):
 
     @api.expect(car_data)
     def put(self, brand, model_id):
-        """특정 모델의 정보를 수정합니다. (PUT /ns_cars/cars/브랜드명/모델ID)"""
+        """특정 모델의 정보를 수정합니다. (PUT /cars/브랜드명/모델ID)"""
         if brand not in car_info:
             abort(404, description=f"Brand {brand} doesn't exists")
         if model_id not in car_info[brand]:
