@@ -1,6 +1,15 @@
 # 하네스 세션 로그 — 개인 작업 기록이므로 공유하지 않음
 claude-progress.txt
 
+# 에이전트 도구 및 Claude 설정
+.agents/
+.claude/
+skills-lock.json
+
+# 환경변수 (비밀번호 등 민감 정보)
+.env
+**/.env
+
 # Python 캐시
 __pycache__/
 *.pyc

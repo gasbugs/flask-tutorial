@@ -1,0 +1,96 @@
+services:
+  opensearch-node1: # 이는 Docker 네트워크 내에서 컨테이너의 호스트 이름이기도 합니다 (예: https://opensearch-node1/)
+    # https://hub.docker.com/r/opensearchproject/opensearch
+    image: opensearchproject/opensearch:latest # 사용 가능한 최신 이미지를 지정합니다 - 특정 버전을 원하면 수정하세요
+    container_name: opensearch-node1
+    environment:
+      - cluster.name=opensearch-cluster # 클러스터의 이름을 지정합니다
+      - node.name=opensearch-node1 # 이 컨테이너에서 실행될 노드의 이름을 지정합니다
+      - discovery.seed_hosts=opensearch-node1,opensearch-node2,opensearch-node3 # 클러스터를 발견할 때 찾을 노드들
+      - cluster.initial_cluster_manager_nodes=opensearch-node1,opensearch-node2,opensearch-node3 # 클러스터 관리자 역할을 할 수 있는 노드들
+      - bootstrap.memory_lock=true # JVM 힙 메모리 스와핑을 비활성화합니다
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m" # JVM 힙 최소 및 최대 크기를 시스템 RAM의 최소 50%로 설정합니다
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_INITIAL_ADMIN_PASSWORD}    # 데모 구성을 사용할 때 데모 관리자 사용자 비밀번호를 설정합니다. OpenSearch 2.12 이상에서 필요합니다
+      - node.roles=data,cluster_manager # 3개 노드는 모두 data와 manager을 동시에 수행
+      - node.attr.temp=cold # 콜드 스토리지 
+    ulimits:
+      memlock:
+        soft: -1 # memlock을 무제한으로 설정합니다 (소프트 또는 하드 제한 없음)
+        hard: -1
+      nofile:
+        soft: 65536 # opensearch 사용자의 최대 열린 파일 수 - 최소 65536으로 설정
+        hard: 65536
+    volumes:
+      - opensearch-data1:/usr/share/opensearch/data # opensearch-data1이라는 볼륨을 생성하고 컨테이너에 마운트합니다
+    ports:
+      - 9200:9200 # REST API
+      - 9600:9600 # 성능 분석기
+    networks:
+      - opensearch-net # 모든 컨테이너가 동일한 Docker 브리지 네트워크에 참여합니다
+  opensearch-node2:
+    image: opensearchproject/opensearch:latest # 문제를 피하기 위해 opensearch-node1과 동일한 이미지를 사용해야 합니다
+    container_name: opensearch-node2
+    environment:
+      - cluster.name=opensearch-cluster
+      - node.name=opensearch-node2
+      - discovery.seed_hosts=opensearch-node1,opensearch-node2,opensearch-node3
+      - cluster.initial_cluster_manager_nodes=opensearch-node1,opensearch-node2,opensearch-node3
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_INITIAL_ADMIN_PASSWORD}
+      - node.roles=data,cluster_manager
+      - node.attr.temp=warm
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - opensearch-data2:/usr/share/opensearch/data
+    networks:
+      - opensearch-net
+  opensearch-node3:
+    image: opensearchproject/opensearch:latest # 문제를 피하기 위해 opensearch-node1과 동일한 이미지를 사용해야 합니다
+    container_name: opensearch-node3
+    environment:
+      - cluster.name=opensearch-cluster
+      - node.name=opensearch-node3
+      - discovery.seed_hosts=opensearch-node1,opensearch-node2,opensearch-node3
+      - cluster.initial_cluster_manager_nodes=opensearch-node1,opensearch-node2,opensearch-node3
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_INITIAL_ADMIN_PASSWORD}
+      - node.roles=data,cluster_manager
+      - node.attr.temp=hot
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - opensearch-data3:/usr/share/opensearch/data
+    networks:
+      - opensearch-net
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:latest # opensearch-dashboards의 버전이 다른 노드에 설치된 opensearch의 버전과 일치하는지 확인하세요
+    container_name: opensearch-dashboards
+    ports:
+      - 5601:5601 # 호스트 포트 5601을 컨테이너 포트 5601에 매핑합니다
+    expose:
+      - "5601" # OpenSearch Dashboards에 대한 웹 액세스를 위해 포트 5601을 노출합니다
+    environment:
+      OPENSEARCH_HOSTS: '["https://opensearch-node1:9200","https://opensearch-node2:9200","https://opensearch-node3:9200"]' # OpenSearch Dashboards가 쿼리할 OpenSearch 노드를 정의합니다
+    networks:
+      - opensearch-net
+
+volumes:
+  opensearch-data1:
+  opensearch-data2:
+  opensearch-data3:
+
+networks:
+  opensearch-net:
