@@ -8,7 +8,7 @@ flask-restx는 Flask를 확장하여 Swagger UI(API 명세서 웹페이지)를
 자동으로 생성해주는 라이브러리입니다.
 실행 후 http://127.0.0.1:5000 에 접속하면 API 문서를 확인할 수 있습니다.
 """
-from flask import Flask, Response, abort, request  # Flask 기본 도구들
+from flask import Flask, request  # Flask 기본 도구들 (Response, abort는 더 이상 사용하지 않습니다)
 from flask_restx import Api, Resource, fields      # REST API 구성 도구들
 
 # Flask 앱과 API 객체를 만듭니다.
@@ -49,14 +49,14 @@ class Cars(Resource):
     def get(self):
         """등록된 모든 자동차 정보와 총 대수를 조회합니다. (GET /cars)"""
         # 전체 차량 수를 계산합니다. (모든 브랜드의 모델 수 합산)
-        count = 0
-        for _, models in car_info.items():
-            count += len(models)
+        count = sum(len(models) for models in car_info.values())
 
+        # 응답 형식: dict와 HTTP 상태코드를 함께 반환합니다.
         return {
+            'message': 'ok',
             'number_of_vehicles': count,  # 총 차량 수
             'car_info': car_info           # 전체 데이터
-        }
+        }, 200
 
 
 @cars_ns.route('/<string:brand>')
@@ -67,36 +67,35 @@ class CarsBrand(Resource):
         """특정 브랜드의 차량 목록을 조회합니다. (GET /cars/브랜드명)"""
         # 요청한 브랜드가 없으면 404 에러를 반환합니다.
         if brand not in car_info:
-            abort(404, description=f"Brand {brand} doesn't exist")
-        data = car_info[brand]
-
+            return {'message': f'브랜드 {brand}가 존재하지 않습니다'}, 404
         return {
-            'number_of_vehicles': len(data),  # 해당 브랜드의 모델 수
-            'data': data
-        }
+            'message': 'ok',
+            'number_of_vehicles': len(car_info[brand]),  # 해당 브랜드의 모델 수
+            'data': car_info[brand]
+        }, 200
 
     def post(self, brand):
         """새로운 브랜드를 등록합니다. (POST /cars/브랜드명)"""
         # 이미 존재하는 브랜드면 409(중복) 에러를 반환합니다.
         if brand in car_info:
-            abort(409, description=f"Brand {brand} already exists")
+            return {'message': f'브랜드 {brand}가 이미 존재합니다'}, 409
 
         # 새 브랜드를 빈 딕셔너리로 초기화합니다.
         car_info[brand] = dict()
-        return Response(status=201)  # 201: 생성 성공을 의미하는 HTTP 상태코드
+        return {'message': 'created'}, 201  # 201: 생성 성공을 의미하는 HTTP 상태코드
 
     def delete(self, brand):
         """특정 브랜드와 해당 브랜드의 모든 모델을 삭제합니다. (DELETE /cars/브랜드명)"""
         if brand not in car_info:
-            abort(404, description=f"Brand {brand} doesn't exists")
+            return {'message': f'브랜드 {brand}가 존재하지 않습니다'}, 404
 
         del car_info[brand]
-        return Response(status=200)  # 200: 성공을 의미하는 HTTP 상태코드
+        return '', 204  # 204: 삭제 성공 (응답 본문 없음)
 
     def put(self, brand):
-        """브랜드 이름을 변경합니다. (PUT /cars/브랜드명) - 미구현"""
-        # todo something
-        return Response(status=200)
+        """브랜드 이름 변경 — 실습 과제: 이 메서드를 직접 구현해보세요."""
+        # TODO(실습): new_name을 요청 바디에서 받아서 브랜드 이름을 바꾸는 기능을 구현하세요.
+        return {'message': '미구현 기능입니다'}, 501
 
 
 @cars_ns.route('/<string:brand>/<int:model_id>')
@@ -107,53 +106,54 @@ class CarsBrandModel(Resource):
         """특정 브랜드의 특정 모델을 조회합니다. (GET /cars/브랜드명/모델ID)"""
         # 브랜드가 없거나 모델이 없으면 404 에러를 반환합니다.
         if brand not in car_info:
-            abort(404, description=f"Brand {brand} doesn't exists")
+            return {'message': f'브랜드 {brand}가 존재하지 않습니다'}, 404
         if model_id not in car_info[brand]:
-            abort(404, description=f"Car ID {brand}/{model_id} doesn't exists")
+            return {'message': f'모델 ID {model_id}가 존재하지 않습니다'}, 404
 
         return {
+            'message': 'ok',
             'model_id': model_id,
             'data': car_info[brand][model_id]
-        }
+        }, 200
 
     @api.expect(car_data)  # 요청 바디가 car_data 스키마를 따라야 한다는 것을 Swagger에 표시합니다.
     def post(self, brand, model_id):
         """특정 브랜드에 새 모델을 추가합니다. (POST /cars/브랜드명/모델ID)"""
         if brand not in car_info:
-            abort(404, description=f"Brand {brand} doesn't exists")
+            return {'message': f'브랜드 {brand}가 존재하지 않습니다'}, 404
         if model_id in car_info[brand]:
-            abort(409, description=f"Car ID {brand}/{model_id} already exists")
+            return {'message': f'모델 ID {model_id}가 이미 존재합니다'}, 409
 
         # 요청 바디(JSON)에서 차량 정보를 읽어 저장합니다.
         params = request.get_json()
         car_info[brand][model_id] = params
 
-        return Response(status=201)
+        return {'message': 'created'}, 201
 
     def delete(self, brand, model_id):
         """특정 모델을 삭제합니다. (DELETE /cars/브랜드명/모델ID)"""
         if brand not in car_info:
-            abort(404, description=f"Brand {brand} doesn't exists")
+            return {'message': f'브랜드 {brand}가 존재하지 않습니다'}, 404
         if model_id not in car_info[brand]:
-            abort(404, description=f"Car ID {brand}/{model_id} doesn't exists")
+            return {'message': f'모델 ID {model_id}가 존재하지 않습니다'}, 404
 
         del car_info[brand][model_id]
 
-        return Response(status=200)
+        return '', 204  # 204: 삭제 성공 (응답 본문 없음)
 
     @api.expect(car_data)
     def put(self, brand, model_id):
         """특정 모델의 정보를 수정합니다. (PUT /cars/브랜드명/모델ID)"""
         if brand not in car_info:
-            abort(404, description=f"Brand {brand} doesn't exists")
+            return {'message': f'브랜드 {brand}가 존재하지 않습니다'}, 404
         if model_id not in car_info[brand]:
-            abort(404, description=f"Car ID {brand}/{model_id} doesn't exists")
+            return {'message': f'모델 ID {model_id}가 존재하지 않습니다'}, 404
 
         # 요청 바디에서 새 정보를 읽어 기존 데이터를 덮어씁니다.
         params = request.get_json()
         car_info[brand][model_id] = params
 
-        return Response(status=200)
+        return {'message': 'ok'}, 200
 
 
 if __name__ == "__main__":
