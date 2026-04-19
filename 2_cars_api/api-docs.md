@@ -1,8 +1,8 @@
-# Cars API 문서
+# Cars API 문서 (K8s 스타일)
 
-자동차 정보를 관리하는 REST API입니다. 브랜드와 모델 계층 구조로 데이터를 관리합니다.
+자동차 정보를 관리하는 REST API입니다. Kubernetes REST API 스타일을 따릅니다.
 
-> **Swagger UI**: 서버 실행 후 `http://127.0.0.1:5000` 접속하면 이 문서의 내용을 웹 UI로 확인하고 직접 테스트할 수 있습니다.
+> **Swagger UI**: 서버 실행 후 `http://127.0.0.1:5000/docs` 접속하면 이 문서의 내용을 웹 UI로 확인하고 직접 테스트할 수 있습니다.
 
 ---
 
@@ -15,14 +15,27 @@ python app.py
 
 ---
 
+## K8s REST API 스타일이란?
+
+이 API는 Kubernetes REST API 규칙을 따릅니다.
+
+| 원칙 | 설명 |
+|------|------|
+| URL에 버전 포함 | `/api/v1/` 접두사 |
+| 리소스 생성 시 이름을 body에 담음 | `POST /api/v1/brands/` + `{"name": "bentz"}` |
+| 응답 구조 통일 | `apiVersion`, `kind`, `metadata`, `items`/`data` |
+| 에러도 동일한 구조 | `kind: Status`, `status: Failure` |
+
+---
+
 ## 데이터 구조
 
-데이터는 메모리에 아래 형태로 저장됩니다. 서버를 재시작하면 초기화됩니다.
+데이터는 메모리에 저장됩니다. 서버를 재시작하면 초기화됩니다.
 
 ```
 {
   "브랜드명": {
-    모델ID(정수): {
+    "모델ID문자열": {
       "name": "모델명",
       "price": 가격(정수),
       "fuel_type": "연료종류",
@@ -34,45 +47,62 @@ python app.py
 }
 ```
 
-**예시:**
-```json
-{
-  "bentz": {
-    "0": {
-      "name": "e-class",
-      "price": 1000000,
-      "fuel_type": "gasoline",
-      "fuel_efficiency": "9.1~13.2km/l",
-      "engine_power": "367hp",
-      "engine_cylinder": "I6"
-    }
-  }
-}
-```
-
 ---
 
 ## 공통 응답 형식
 
 모든 응답은 JSON 형식입니다.
 
-| 상황 | 상태코드 | 응답 예시 |
-|------|----------|-----------|
-| 조회 성공 | 200 | `{"message": "ok", "data": ...}` |
-| 생성 성공 | 201 | `{"message": "created"}` |
-| 삭제 성공 | 204 | (응답 본문 없음) |
-| 잘못된 요청 | 400 | `{"message": "필수 항목이 누락되었습니다: ['name']"}` |
-| 리소스 없음 | 404 | `{"message": "브랜드 bentz가 존재하지 않습니다"}` |
-| 중복 | 409 | `{"message": "브랜드 bentz가 이미 존재합니다"}` |
-| 미구현 | 501 | `{"message": "미구현 기능입니다"}` |
+### 목록 응답
+```json
+{
+  "apiVersion": "v1",
+  "kind": "BrandList",
+  "metadata": { "total": 2, "page": 1, "size": 10 },
+  "items": [{ "name": "bentz" }, { "name": "bmw" }]
+}
+```
+
+### 단일 항목 응답
+```json
+{
+  "apiVersion": "v1",
+  "kind": "Brand",
+  "metadata": { "name": "bentz" },
+  "data": { ... }
+}
+```
+
+### 에러 응답
+```json
+{
+  "apiVersion": "v1",
+  "kind": "Status",
+  "status": "Failure",
+  "message": "Brand bentz not found",
+  "code": 404
+}
+```
+
+### HTTP 상태코드 기준
+
+| 상황 | 코드 |
+|------|------|
+| 조회 성공 | 200 |
+| 생성 성공 | 201 |
+| 삭제 성공 | 204 |
+| 잘못된 요청 | 400 |
+| 리소스 없음 | 404 |
+| 중복 | 409 |
+| 미구현 | 501 |
 
 ---
 
 ## 엔드포인트
 
-### 전체 목록 조회
+### 브랜드 목록 조회
 
-#### `GET /cars/`
+#### `GET /api/v1/brands/`
 
 등록된 모든 브랜드 목록을 페이지 단위로 조회합니다.
 
@@ -83,55 +113,57 @@ python app.py
 | `page` | 정수 | 1 | 페이지 번호 |
 | `size` | 정수 | 10 | 페이지당 브랜드 수 |
 
-**요청 예시**
-```
-GET /cars/?page=1&size=2
-```
-
 **응답 예시 (200)**
 ```json
 {
-  "message": "ok",
-  "number_of_vehicles": 3,
-  "total": 2,
-  "page": 1,
-  "size": 2,
-  "car_info": {
-    "bentz": { "0": { "name": "e-class", ... } },
-    "bmw":   {}
-  }
+  "apiVersion": "v1",
+  "kind": "BrandList",
+  "metadata": { "total": 2, "number_of_vehicles": 3, "page": 1, "size": 10 },
+  "items": [{ "name": "bentz" }, { "name": "bmw" }]
 }
 ```
 
-| 필드 | 설명 |
-|------|------|
-| `number_of_vehicles` | 전체 등록 차량 수 (모든 브랜드 합산) |
-| `total` | 전체 브랜드 수 |
-| `page` | 현재 페이지 번호 |
-| `size` | 현재 페이지 크기 |
-| `car_info` | 현재 페이지의 브랜드 데이터 |
+---
+
+### 브랜드 생성
+
+#### `POST /api/v1/brands/`
+
+새로운 브랜드를 등록합니다. 브랜드 이름을 요청 body에 담습니다.
+
+**요청 body**
+```json
+{ "name": "bentz" }
+```
+
+**응답 (201)**
+```json
+{
+  "apiVersion": "v1",
+  "kind": "Brand",
+  "metadata": { "name": "bentz" }
+}
+```
+
+**오류**
+- `400` — name 필드 누락
+- `409` — 브랜드가 이미 존재할 때
 
 ---
 
-### 브랜드 관리
+### 브랜드 조회
 
-#### `GET /cars/<brand>`
+#### `GET /api/v1/brands/{brand}`
 
-특정 브랜드의 차량 목록을 조회합니다.
-
-**요청 예시**
-```
-GET /cars/bentz
-```
+특정 브랜드를 조회합니다.
 
 **응답 예시 (200)**
 ```json
 {
-  "message": "ok",
-  "number_of_vehicles": 1,
-  "data": {
-    "0": { "name": "e-class", "price": 1000000, ... }
-  }
+  "apiVersion": "v1",
+  "kind": "Brand",
+  "metadata": { "name": "bentz", "total": 1 },
+  "data": { "0": { "name": "e-class", ... } }
 }
 ```
 
@@ -140,33 +172,22 @@ GET /cars/bentz
 
 ---
 
-#### `POST /cars/<brand>`
+### 브랜드 이름 변경
 
-새로운 브랜드를 등록합니다. 요청 바디 없이 URL만으로 생성됩니다.
+#### `PUT /api/v1/brands/{brand}`
 
-**요청 예시**
-```
-POST /cars/bentz
-```
-
-**응답 (201)**
-```json
-{ "message": "created" }
-```
-
-**오류**
-- `409` — 브랜드가 이미 존재할 때
+> **실습 과제**: 브랜드 이름 변경 기능을 직접 구현해보세요.
+> 현재 `501 Not Implemented` 를 반환합니다.
+>
+> 힌트: body에서 `name`을 읽어 `car_info`의 키를 변경합니다.
 
 ---
 
-#### `DELETE /cars/<brand>`
+### 브랜드 삭제
+
+#### `DELETE /api/v1/brands/{brand}`
 
 브랜드와 해당 브랜드의 모든 모델을 삭제합니다.
-
-**요청 예시**
-```
-DELETE /cars/bentz
-```
 
 **응답 (204)** — 응답 본문 없음
 
@@ -175,66 +196,46 @@ DELETE /cars/bentz
 
 ---
 
-#### `PUT /cars/<brand>`
+### 모델 목록 조회
 
-> **실습 과제**: 브랜드 이름 변경 기능을 직접 구현해보세요.  
-> 현재 `501 Not Implemented` 를 반환합니다.
+#### `GET /api/v1/brands/{brand}/models`
 
----
-
-### 모델 관리
-
-#### `GET /cars/<brand>/<model_id>`
-
-특정 브랜드의 특정 모델을 조회합니다.
-
-**요청 예시**
-```
-GET /cars/bentz/0
-```
+특정 브랜드의 모델 목록을 조회합니다.
 
 **응답 예시 (200)**
 ```json
 {
-  "message": "ok",
-  "model_id": 0,
-  "data": {
-    "name": "e-class",
-    "price": 1000000,
-    "fuel_type": "gasoline",
-    "fuel_efficiency": "9.1~13.2km/l",
-    "engine_power": "367hp",
-    "engine_cylinder": "I6"
-  }
+  "apiVersion": "v1",
+  "kind": "ModelList",
+  "metadata": { "brand": "bentz", "total": 1 },
+  "items": [{ "model_id": "0", "name": "e-class", ... }]
 }
 ```
 
-**오류**
-- `404` — 브랜드 또는 모델이 존재하지 않을 때
-
 ---
 
-#### `POST /cars/<brand>/<model_id>`
+### 모델 생성
+
+#### `POST /api/v1/brands/{brand}/models`
 
 특정 브랜드에 새 모델을 추가합니다.
 
-**요청 바디 (JSON)**
+**요청 body**
 
 | 필드 | 타입 | 필수 | 설명 |
 |------|------|------|------|
+| `model_id` | 정수 | ✅ | 모델 ID |
 | `name` | 문자열 | ✅ | 모델명 |
 | `price` | 정수 | ✅ | 가격 |
-| `fuel_type` | 문자열 | ✅ | 연료 종류 (예: gasoline, diesel, electric) |
-| `fuel_efficiency` | 문자열 | ✅ | 연비 (예: 9.1~13.2km/l) |
-| `engine_power` | 문자열 | ✅ | 엔진 출력 (예: 367hp) |
-| `engine_cylinder` | 문자열 | ✅ | 실린더 구성 (예: I6, V8) |
+| `fuel_type` | 문자열 | ✅ | 연료 종류 |
+| `fuel_efficiency` | 문자열 | ✅ | 연비 |
+| `engine_power` | 문자열 | ✅ | 엔진 출력 |
+| `engine_cylinder` | 문자열 | ✅ | 실린더 구성 |
 
 **요청 예시**
-```
-POST /cars/bentz/0
-Content-Type: application/json
-
+```json
 {
+  "model_id": 0,
   "name": "e-class",
   "price": 1000000,
   "fuel_type": "gasoline",
@@ -246,45 +247,62 @@ Content-Type: application/json
 
 **응답 (201)**
 ```json
-{ "message": "created" }
+{
+  "apiVersion": "v1",
+  "kind": "Model",
+  "metadata": { "brand": "bentz", "model_id": "0" }
+}
 ```
 
 **오류**
-- `400` — 필수 필드 누락 (누락된 필드 목록 포함)
+- `400` — 필수 필드 누락
 - `404` — 브랜드가 존재하지 않을 때
 - `409` — 모델 ID가 이미 존재할 때
 
 ---
 
-#### `PUT /cars/<brand>/<model_id>`
+### 모델 조회
 
-특정 모델의 정보를 수정합니다. 요청 바디의 모든 필드가 덮어쓰여집니다.
+#### `GET /api/v1/brands/{brand}/models/{model_id}`
 
-**요청 바디**: `POST`와 동일한 형식
+특정 모델을 조회합니다.
 
-**응답 (200)**
+**응답 예시 (200)**
 ```json
-{ "message": "ok" }
+{
+  "apiVersion": "v1",
+  "kind": "Model",
+  "metadata": { "brand": "bentz", "model_id": "0" },
+  "data": {
+    "name": "e-class",
+    "price": 1000000,
+    "fuel_type": "gasoline",
+    "fuel_efficiency": "9.1~13.2km/l",
+    "engine_power": "367hp",
+    "engine_cylinder": "I6"
+  }
+}
 ```
-
-**오류**
-- `404` — 브랜드 또는 모델이 존재하지 않을 때
 
 ---
 
-#### `DELETE /cars/<brand>/<model_id>`
+### 모델 수정
+
+#### `PUT /api/v1/brands/{brand}/models/{model_id}`
+
+특정 모델의 정보를 수정합니다. 요청 body의 모든 필드가 덮어쓰여집니다.
+
+**요청 body**: 모델 생성과 동일한 형식 (`model_id` 제외)
+
+---
+
+### 모델 삭제
+
+#### `DELETE /api/v1/brands/{brand}/models/{model_id}`
 
 특정 모델을 삭제합니다.
 
-**요청 예시**
-```
-DELETE /cars/bentz/0
-```
-
 **응답 (204)** — 응답 본문 없음
-
-**오류**
-- `404` — 브랜드 또는 모델이 존재하지 않을 때
 
 ---
 
@@ -292,27 +310,29 @@ DELETE /cars/bentz/0
 
 ```bash
 # 1. 브랜드 생성
-curl -X POST http://127.0.0.1:5000/cars/bentz
+curl -X POST http://127.0.0.1:5000/api/v1/brands/ \
+  -H "Content-Type: application/json" \
+  -d '{"name": "bentz"}'
 
 # 2. 모델 추가
-curl -X POST http://127.0.0.1:5000/cars/bentz/0 \
+curl -X POST http://127.0.0.1:5000/api/v1/brands/bentz/models \
   -H "Content-Type: application/json" \
-  -d '{"name":"e-class","price":1000000,"fuel_type":"gasoline","fuel_efficiency":"9.1~13.2km/l","engine_power":"367hp","engine_cylinder":"I6"}'
+  -d '{"model_id":0,"name":"e-class","price":1000000,"fuel_type":"gasoline","fuel_efficiency":"9.1~13.2km/l","engine_power":"367hp","engine_cylinder":"I6"}'
 
-# 3. 전체 목록 조회
-curl http://127.0.0.1:5000/cars/
+# 3. 브랜드 목록 조회
+curl http://127.0.0.1:5000/api/v1/brands/
 
 # 4. 특정 모델 조회
-curl http://127.0.0.1:5000/cars/bentz/0
+curl http://127.0.0.1:5000/api/v1/brands/bentz/models/0
 
 # 5. 모델 수정
-curl -X PUT http://127.0.0.1:5000/cars/bentz/0 \
+curl -X PUT http://127.0.0.1:5000/api/v1/brands/bentz/models/0 \
   -H "Content-Type: application/json" \
   -d '{"name":"e-class-updated","price":1100000,"fuel_type":"gasoline","fuel_efficiency":"10.0km/l","engine_power":"400hp","engine_cylinder":"I6"}'
 
 # 6. 모델 삭제
-curl -X DELETE http://127.0.0.1:5000/cars/bentz/0
+curl -X DELETE http://127.0.0.1:5000/api/v1/brands/bentz/models/0
 
 # 7. 브랜드 삭제
-curl -X DELETE http://127.0.0.1:5000/cars/bentz
+curl -X DELETE http://127.0.0.1:5000/api/v1/brands/bentz
 ```
