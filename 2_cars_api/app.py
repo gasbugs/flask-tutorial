@@ -1,189 +1,227 @@
 """
-자동차 정보 REST API 예제 (flask-restx 사용)
+자동차 정보 REST API — Kubernetes 스타일 (K8s API 표준)
 
-REST API란 URL 주소와 HTTP 메서드(GET/POST/PUT/DELETE)를 조합하여
-데이터를 주고받는 방식입니다.
-
-flask-restx는 Flask를 확장하여 Swagger UI(API 명세서 웹페이지)를
-자동으로 생성해주는 라이브러리입니다.
-실행 후 http://127.0.0.1:5000 에 접속하면 API 문서를 확인할 수 있습니다.
+Kubernetes REST API 스타일의 핵심 원칙:
+1. URL에 버전 포함: /api/v1/
+2. 리소스 생성 시 이름을 URL이 아닌 body에 담음
+3. 응답 형식 통일: apiVersion, kind, metadata, items/data
+4. 에러도 동일한 형식: kind=Status, status=Failure
 """
-from flask import Flask, request  # Flask 기본 도구들 (Response, abort는 더 이상 사용하지 않습니다)
-from flask_restx import Api, Resource, fields      # REST API 구성 도구들
+from flask import Flask, request
+from flask_restx import Api, Resource, fields
 
-# Flask 앱과 API 객체를 만듭니다.
 app = Flask(__name__)
-api = Api(app)  # Api 객체가 Swagger 문서를 자동 생성합니다.
+# prefix='/api/v1': 모든 URL 앞에 /api/v1이 자동으로 붙습니다.
+api = Api(app, prefix='/api/v1', doc='/docs')
 
-# namespace(이름공간)는 관련된 API를 하나의 그룹으로 묶어주는 역할입니다.
-# 모든 URL 앞에 '/cars'가 붙습니다. 예: /cars/bentz
-cars_ns = api.namespace('cars', description='Car APIs')
+# namespace('brands'): 모든 URL 앞에 /brands가 추가로 붙습니다.
+# 최종 URL 예시: /api/v1/brands/, /api/v1/brands/bentz
+brands_ns = api.namespace('brands', description='Brand APIs')
 
-# API가 받을 요청 데이터의 형태(스키마)를 정의합니다.
-# 이 정의는 Swagger 문서에도 자동으로 표시됩니다.
-car_data = api.model(
-    'Car Data',
-    {
-      "name": fields.String(description="model name", required=True),       # 모델명 (필수)
-      "price": fields.Integer(description="car price", required=True),      # 가격 (필수)
-      "fuel_type": fields.String(description="fuel type", required=True),   # 연료 종류 (필수)
-      "fuel_efficiency": fields.String(description="fuel efficiency",
-                                       required=True),                       # 연비 (필수)
-      "engine_power": fields.String(description="engine power", required=True),      # 엔진 출력 (필수)
-      "engine_cylinder": fields.String(description="engine cylinder",
-                                       required=True)                        # 실린더 수 (필수)
-    }
-)
+# 브랜드 생성 요청 스키마 — 이름을 URL이 아닌 body로 받습니다 (K8s 스타일)
+brand_create = api.model('BrandCreate', {
+    "name": fields.String(required=True, description="브랜드 이름 (예: bentz)")
+})
 
-# 자동차 데이터를 저장하는 메모리 딕셔너리입니다.
-# 구조: { 브랜드명: { 모델ID: 모델데이터 } }
-# 예: { "bentz": { 0: { "name": "e-class", ... } } }
-# 서버를 재시작하면 데이터가 초기화됩니다(실제 서비스에서는 데이터베이스를 사용합니다).
+# 모델 생성 요청 스키마 — model_id도 body에 포함됩니다
+model_create = api.model('ModelCreate', {
+    "model_id": fields.Integer(required=True, description="모델 ID (예: 0)"),
+    "name": fields.String(required=True, description="모델명"),
+    "price": fields.Integer(required=True, description="가격"),
+    "fuel_type": fields.String(required=True, description="연료 종류"),
+    "fuel_efficiency": fields.String(required=True, description="연비"),
+    "engine_power": fields.String(required=True, description="엔진 출력"),
+    "engine_cylinder": fields.String(required=True, description="실린더")
+})
+
+# 모델 수정 요청 스키마 — model_id는 URL에 있으므로 body에서 제외
+model_update = api.model('ModelUpdate', {
+    "name": fields.String(required=True, description="모델명"),
+    "price": fields.Integer(required=True, description="가격"),
+    "fuel_type": fields.String(required=True, description="연료 종류"),
+    "fuel_efficiency": fields.String(required=True, description="연비"),
+    "engine_power": fields.String(required=True, description="엔진 출력"),
+    "engine_cylinder": fields.String(required=True, description="실린더")
+})
+
+# 자동차 데이터를 저장하는 메모리 딕셔너리
+# 구조: { 브랜드명: { "모델ID문자열": 모델데이터 } }
+# 예: { "bentz": { "0": { "name": "e-class", ... } } }
 car_info = {}
 
 
-@cars_ns.route('/')
-class Cars(Resource):
-    """전체 자동차 목록을 관리하는 API 클래스입니다."""
+def k8s_list(kind, items, metadata=None):
+    """K8s 스타일 목록 응답을 생성합니다.
+    kind: 리소스 종류 (예: BrandList, ModelList)
+    items: 목록 데이터
+    metadata: 추가 정보 (total, page, size 등)"""
+    meta = metadata or {}
+    meta.setdefault('total', len(items))
+    return {"apiVersion": "v1", "kind": kind, "metadata": meta, "items": items}, 200
+
+
+def k8s_item(kind, metadata, data):
+    """K8s 스타일 단일 항목 응답을 생성합니다."""
+    return {"apiVersion": "v1", "kind": kind, "metadata": metadata, "data": data}, 200
+
+
+def k8s_error(message, code):
+    """K8s 스타일 에러 응답을 생성합니다.
+    K8s에서 에러는 kind=Status, status=Failure 형태로 반환됩니다."""
+    return {
+        "apiVersion": "v1",
+        "kind": "Status",
+        "status": "Failure",
+        "message": message,
+        "code": code
+    }, code
+
+
+@brands_ns.route('/')
+class BrandList(Resource):
+    """브랜드 목록 조회 및 생성 (GET /api/v1/brands/, POST /api/v1/brands/)"""
 
     def get(self):
-        """등록된 자동차 정보를 페이지 단위로 조회합니다.
-        쿼리 파라미터: page(페이지 번호, 기본값 1), size(페이지당 항목 수, 기본값 10)
-        예시: GET /cars?page=2&size=5"""
-        # request.args.get: URL 뒤 ?key=value 형태의 값을 읽어옵니다.
-        page = request.args.get('page', 1, type=int)   # 기본값: 1페이지
-        size = request.args.get('size', 10, type=int)  # 기본값: 10개
+        """브랜드 목록을 페이지 단위로 조회합니다."""
+        page = request.args.get('page', 1, type=int)
+        size = request.args.get('size', 10, type=int)
 
         all_brands = list(car_info.keys())
         total = len(all_brands)
-
-        # 슬라이싱으로 해당 페이지의 브랜드만 추출합니다.
-        # 예: page=2, size=5 → [5:10]
         start = (page - 1) * size
-        end = start + size
-        paged_brands = all_brands[start:end]
-        paged_info = {brand: car_info[brand] for brand in paged_brands}
-
-        # 전체 차량 수는 페이지 관계없이 전체 기준으로 계산합니다.
+        paged_brands = all_brands[start:start + size]
         count = sum(len(models) for models in car_info.values())
 
-        return {
-            'message': 'ok',
-            'number_of_vehicles': count,
-            'total': total,
-            'page': page,
-            'size': size,
-            'car_info': paged_info
-        }, 200
+        # K8s items 형식: 각 브랜드를 {"name": "브랜드명"} 형태로 변환
+        items = [{"name": b} for b in paged_brands]
+        return k8s_list("BrandList", items, {
+            "total": total,
+            "number_of_vehicles": count,
+            "page": page,
+            "size": size
+        })
+
+    @brands_ns.expect(brand_create)
+    def post(self):
+        """새로운 브랜드를 생성합니다. body: {"name": "bentz"}"""
+        params = request.get_json()
+        name = params.get("name", "").strip()
+
+        if not name:
+            return k8s_error("name 필드가 필요합니다", 400)
+        if name in car_info:
+            return k8s_error(f"Brand {name} already exists", 409)
+
+        car_info[name] = {}
+        return {"apiVersion": "v1", "kind": "Brand",
+                "metadata": {"name": name}}, 201
 
 
-@cars_ns.route('/<string:brand>')
-class CarsBrand(Resource):
-    """특정 브랜드 정보를 관리하는 API 클래스입니다."""
+@brands_ns.route('/<string:brand>')
+class BrandDetail(Resource):
+    """특정 브랜드 조회, 수정, 삭제"""
 
     def get(self, brand):
-        """특정 브랜드의 차량 목록을 조회합니다. (GET /cars/브랜드명)"""
-        # 요청한 브랜드가 없으면 404 에러를 반환합니다.
+        """특정 브랜드를 조회합니다."""
         if brand not in car_info:
-            return {'message': f'브랜드 {brand}가 존재하지 않습니다'}, 404
-        return {
-            'message': 'ok',
-            'number_of_vehicles': len(car_info[brand]),  # 해당 브랜드의 모델 수
-            'data': car_info[brand]
-        }, 200
-
-    def post(self, brand):
-        """새로운 브랜드를 등록합니다. (POST /cars/브랜드명)"""
-        # 이미 존재하는 브랜드면 409(중복) 에러를 반환합니다.
-        if brand in car_info:
-            return {'message': f'브랜드 {brand}가 이미 존재합니다'}, 409
-
-        # 새 브랜드를 빈 딕셔너리로 초기화합니다.
-        car_info[brand] = dict()
-        return {'message': 'created'}, 201  # 201: 생성 성공을 의미하는 HTTP 상태코드
+            return k8s_error(f"Brand {brand} not found", 404)
+        return k8s_item("Brand",
+                        {"name": brand, "total": len(car_info[brand])},
+                        car_info[brand])
 
     def delete(self, brand):
-        """특정 브랜드와 해당 브랜드의 모든 모델을 삭제합니다. (DELETE /cars/브랜드명)"""
+        """브랜드와 모든 모델을 삭제합니다."""
         if brand not in car_info:
-            return {'message': f'브랜드 {brand}가 존재하지 않습니다'}, 404
-
+            return k8s_error(f"Brand {brand} not found", 404)
         del car_info[brand]
-        return '', 204  # 204: 삭제 성공 (응답 본문 없음)
+        return '', 204
 
     def put(self, brand):
-        """브랜드 이름 변경 — 실습 과제: 이 메서드를 직접 구현해보세요."""
-        # TODO(실습): new_name을 요청 바디에서 받아서 브랜드 이름을 바꾸는 기능을 구현하세요.
-        return {'message': '미구현 기능입니다'}, 501
+        """브랜드 이름 변경 — 실습 과제: 직접 구현해보세요.
+        힌트: body에서 new_name을 읽어 car_info의 키를 변경합니다."""
+        # TODO(실습): body의 name으로 브랜드 이름을 변경하는 기능을 구현하세요.
+        return k8s_error("Not implemented", 501)
 
 
-@cars_ns.route('/<string:brand>/<int:model_id>')
-class CarsBrandModel(Resource):
-    """특정 브랜드의 개별 모델을 관리하는 API 클래스입니다."""
+@brands_ns.route('/<string:brand>/models')
+class ModelList(Resource):
+    """특정 브랜드의 모델 목록 조회 및 생성"""
+
+    def get(self, brand):
+        """모델 목록을 조회합니다."""
+        if brand not in car_info:
+            return k8s_error(f"Brand {brand} not found", 404)
+
+        # model_id를 각 항목에 포함시켜서 반환합니다
+        items = [{"model_id": k, **v} for k, v in car_info[brand].items()]
+        return k8s_list("ModelList", items,
+                        {"brand": brand, "total": len(items)})
+
+    @brands_ns.expect(model_create)
+    def post(self, brand):
+        """새 모델을 추가합니다. body에 model_id와 차량 정보를 포함합니다."""
+        if brand not in car_info:
+            return k8s_error(f"Brand {brand} not found", 404)
+
+        params = request.get_json()
+        model_id = params.get("model_id")
+
+        if model_id is None:
+            return k8s_error("model_id 필드가 필요합니다", 400)
+        if str(model_id) in car_info[brand]:
+            return k8s_error(f"Model {model_id} already exists in {brand}", 409)
+
+        # 필수 필드 검증
+        required = ["name", "price", "fuel_type",
+                    "fuel_efficiency", "engine_power", "engine_cylinder"]
+        missing = [f for f in required if f not in params]
+        if missing:
+            return k8s_error(f"필수 항목 누락: {missing}", 400)
+
+        # model_id는 별도로 관리하므로 저장 데이터에서 제외합니다
+        data = {k: v for k, v in params.items() if k != "model_id"}
+        car_info[brand][str(model_id)] = data
+
+        return {"apiVersion": "v1", "kind": "Model",
+                "metadata": {"brand": brand, "model_id": str(model_id)}}, 201
+
+
+@brands_ns.route('/<string:brand>/models/<int:model_id>')
+class ModelDetail(Resource):
+    """특정 모델 조회, 수정, 삭제"""
 
     def get(self, brand, model_id):
-        """특정 브랜드의 특정 모델을 조회합니다. (GET /cars/브랜드명/모델ID)"""
-        # 브랜드가 없거나 모델이 없으면 404 에러를 반환합니다.
+        """특정 모델을 조회합니다."""
         if brand not in car_info:
-            return {'message': f'브랜드 {brand}가 존재하지 않습니다'}, 404
-        if model_id not in car_info[brand]:
-            return {'message': f'모델 ID {model_id}가 존재하지 않습니다'}, 404
+            return k8s_error(f"Brand {brand} not found", 404)
+        if str(model_id) not in car_info[brand]:
+            return k8s_error(f"Model {model_id} not found in {brand}", 404)
+        return k8s_item("Model",
+                        {"brand": brand, "model_id": str(model_id)},
+                        car_info[brand][str(model_id)])
 
-        return {
-            'message': 'ok',
-            'model_id': model_id,
-            'data': car_info[brand][model_id]
-        }, 200
-
-    @api.expect(car_data)  # 요청 바디가 car_data 스키마를 따라야 한다는 것을 Swagger에 표시합니다.
-    def post(self, brand, model_id):
-        """특정 브랜드에 새 모델을 추가합니다. (POST /cars/브랜드명/모델ID)"""
+    @brands_ns.expect(model_update)
+    def put(self, brand, model_id):
+        """모델 정보를 수정합니다."""
         if brand not in car_info:
-            return {'message': f'브랜드 {brand}가 존재하지 않습니다'}, 404
-        if model_id in car_info[brand]:
-            return {'message': f'모델 ID {model_id}가 이미 존재합니다'}, 409
-
-        # 요청 바디(JSON)에서 차량 정보를 읽어옵니다.
+            return k8s_error(f"Brand {brand} not found", 404)
+        if str(model_id) not in car_info[brand]:
+            return k8s_error(f"Model {model_id} not found in {brand}", 404)
         params = request.get_json()
-
-        # 필수 필드 목록입니다. 하나라도 없으면 400 에러를 반환합니다.
-        required_fields = ["name", "price", "fuel_type",
-                           "fuel_efficiency", "engine_power", "engine_cylinder"]
-
-        # 리스트 컴프리헨션: required_fields 중 params에 없는 것만 골라냅니다.
-        missing = [field for field in required_fields if field not in params]
-        if missing:
-            return {'message': f'필수 항목이 누락되었습니다: {missing}'}, 400
-
-        car_info[brand][model_id] = params
-
-        return {'message': 'created'}, 201
+        car_info[brand][str(model_id)] = params
+        return k8s_item("Model",
+                        {"brand": brand, "model_id": str(model_id)},
+                        params)
 
     def delete(self, brand, model_id):
-        """특정 모델을 삭제합니다. (DELETE /cars/브랜드명/모델ID)"""
+        """특정 모델을 삭제합니다."""
         if brand not in car_info:
-            return {'message': f'브랜드 {brand}가 존재하지 않습니다'}, 404
-        if model_id not in car_info[brand]:
-            return {'message': f'모델 ID {model_id}가 존재하지 않습니다'}, 404
-
-        del car_info[brand][model_id]
-
-        return '', 204  # 204: 삭제 성공 (응답 본문 없음)
-
-    @api.expect(car_data)
-    def put(self, brand, model_id):
-        """특정 모델의 정보를 수정합니다. (PUT /cars/브랜드명/모델ID)"""
-        if brand not in car_info:
-            return {'message': f'브랜드 {brand}가 존재하지 않습니다'}, 404
-        if model_id not in car_info[brand]:
-            return {'message': f'모델 ID {model_id}가 존재하지 않습니다'}, 404
-
-        # 요청 바디에서 새 정보를 읽어 기존 데이터를 덮어씁니다.
-        params = request.get_json()
-        car_info[brand][model_id] = params
-
-        return {'message': 'ok'}, 200
+            return k8s_error(f"Brand {brand} not found", 404)
+        if str(model_id) not in car_info[brand]:
+            return k8s_error(f"Model {model_id} not found in {brand}", 404)
+        del car_info[brand][str(model_id)]
+        return '', 204
 
 
 if __name__ == "__main__":
-    # debug=True: 코드 수정 시 서버 자동 재시작. 개발 환경에서만 사용하세요.
     app.run(debug=True, host='0.0.0.0', port=5000)

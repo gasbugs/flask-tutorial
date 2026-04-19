@@ -1,15 +1,15 @@
 # pylint: disable=redefined-outer-name
 """
-pytest를 이용한 자동차 API 테스트 코드
+pytest를 이용한 자동차 API 테스트 코드 (K8s 스타일)
 
-pytest란 Python에서 가장 많이 쓰이는 테스트 프레임워크입니다.
-터미널에서 'pytest' 명령어를 실행하면 test_로 시작하는 모든 함수를 자동으로 테스트합니다.
+K8s REST API 스타일이란 URL에 버전(/api/v1/)이 포함되고,
+응답이 apiVersion/kind/metadata/items 구조로 통일된 방식입니다.
 """
 import pytest
-from app import app, car_info  # car_info도 가져옵니다 — 테스트마다 초기화하기 위해서입니다.
+from app import app, car_info
 
-# API의 namespace 이름입니다. 모든 URL 앞에 붙습니다.
-NS = 'cars'
+# 모든 API URL의 공통 prefix
+NS = '/api/v1/brands'
 
 
 @pytest.fixture
@@ -21,41 +21,76 @@ def client():
 
 @pytest.fixture(autouse=True)
 def reset_car_info():
-    """매 테스트 실행 전에 car_info를 초기화합니다.
-    autouse=True 이므로 모든 테스트 함수에 자동으로 적용됩니다.
-    이 fixture가 없으면 앞선 테스트의 데이터가 다음 테스트에 남아 오염됩니다."""
+    """매 테스트 전후로 car_info를 초기화합니다."""
     car_info.clear()
     yield
-    car_info.clear()  # 테스트 종료 후에도 정리합니다.
+    car_info.clear()
 
 
-def test_get_root(client):
-    """빈 상태에서 전체 목록 조회 시 차량 수 0, 빈 딕셔너리가 응답되는지 확인합니다."""
-    response = client.get(f"/{NS}/")
+def test_get_brands_empty(client):
+    """빈 상태에서 브랜드 목록 조회 시 K8s BrandList 형식으로 응답되는지 확인합니다."""
+    response = client.get(f"{NS}/")
     assert response.status_code == 200
     data = response.get_json()
-    assert data['number_of_vehicles'] == 0
-    assert data['car_info'] == {}
+    assert data['apiVersion'] == 'v1'
+    assert data['kind'] == 'BrandList'
+    assert data['metadata']['total'] == 0
+    assert data['items'] == []
 
 
 def test_create_brand(client):
-    """브랜드(bentz)를 생성하고, 목록에 정상 반영되는지 확인합니다."""
-    response = client.post(f"/{NS}/bentz", data={})
+    """브랜드를 body의 name으로 생성하고 K8s Brand 형식으로 응답되는지 확인합니다."""
+    response = client.post(f"{NS}/", json={"name": "bentz"})
     assert response.status_code == 201
+    data = response.get_json()
+    assert data['apiVersion'] == 'v1'
+    assert data['kind'] == 'Brand'
+    assert data['metadata']['name'] == 'bentz'
 
-    response = client.get(f"/{NS}/")
+
+def test_create_brand_duplicate(client):
+    """중복 브랜드 생성 시 K8s Status Failure 형식으로 409가 반환되는지 확인합니다."""
+    client.post(f"{NS}/", json={"name": "bentz"})
+    response = client.post(f"{NS}/", json={"name": "bentz"})
+    assert response.status_code == 409
+    data = response.get_json()
+    assert data['kind'] == 'Status'
+    assert data['status'] == 'Failure'
+    assert data['code'] == 409
+
+
+def test_get_brand(client):
+    """브랜드 생성 후 조회 시 K8s Brand 형식으로 응답되는지 확인합니다."""
+    client.post(f"{NS}/", json={"name": "bentz"})
+    response = client.get(f"{NS}/bentz")
     assert response.status_code == 200
     data = response.get_json()
-    assert data['car_info'] == {'bentz': {}}
-    assert data['number_of_vehicles'] == 0
+    assert data['kind'] == 'Brand'
+    assert data['metadata']['name'] == 'bentz'
+
+
+def test_get_brand_not_found(client):
+    """존재하지 않는 브랜드 조회 시 K8s Status Failure 형식으로 404가 반환되는지 확인합니다."""
+    response = client.get(f"{NS}/nonexistent")
+    assert response.status_code == 404
+    data = response.get_json()
+    assert data['kind'] == 'Status'
+    assert data['status'] == 'Failure'
+    assert data['code'] == 404
+
+
+def test_delete_brand(client):
+    """브랜드 삭제 후 204가 반환되는지 확인합니다."""
+    client.post(f"{NS}/", json={"name": "bentz"})
+    response = client.delete(f"{NS}/bentz")
+    assert response.status_code == 204
 
 
 def test_create_model(client):
-    """bentz 브랜드에 e-class 모델을 추가하고, 데이터가 올바르게 저장되는지 확인합니다."""
-    # 이 테스트는 먼저 브랜드를 직접 만들고 시작합니다 — 다른 테스트에 의존하지 않습니다.
-    client.post(f"/{NS}/bentz", data={})
-
+    """모델을 body로 생성하고 K8s Model 형식으로 응답되는지 확인합니다."""
+    client.post(f"{NS}/", json={"name": "bentz"})
     model = {
+        "model_id": 0,
         "name": "e-class",
         "price": 1000000,
         "fuel_type": "gasoline",
@@ -63,57 +98,62 @@ def test_create_model(client):
         "engine_power": "367hp",
         "engine_cylinder": "I6"
     }
-
-    response = client.post(f"/{NS}/bentz/0", json=model)
+    response = client.post(f"{NS}/bentz/models", json=model)
     assert response.status_code == 201
-
-    response = client.get(f"/{NS}/")
-    assert response.status_code == 200
     data = response.get_json()
-    assert data['number_of_vehicles'] == 1
-    assert data['car_info'] == {'bentz': {'0': model}}
-
-
-def test_pagination(client):
-    """페이지네이션이 올바르게 동작하는지 확인합니다.
-    브랜드 3개를 만들고 size=2 로 나눠서 조회합니다."""
-    # 브랜드 3개 생성
-    client.post(f"/{NS}/brand_a", data={})
-    client.post(f"/{NS}/brand_b", data={})
-    client.post(f"/{NS}/brand_c", data={})
-
-    # 1페이지: brand_a, brand_b
-    response = client.get(f"/{NS}/?page=1&size=2")
-    assert response.status_code == 200
-    data = response.get_json()
-    assert data['total'] == 3
-    assert data['page'] == 1
-    assert data['size'] == 2
-    assert len(data['car_info']) == 2
-
-    # 2페이지: brand_c
-    response = client.get(f"/{NS}/?page=2&size=2")
-    assert response.status_code == 200
-    data = response.get_json()
-    assert len(data['car_info']) == 1
+    assert data['apiVersion'] == 'v1'
+    assert data['kind'] == 'Model'
+    assert data['metadata']['brand'] == 'bentz'
+    assert data['metadata']['model_id'] == '0'
 
 
 def test_create_model_missing_fields(client):
-    """필수 필드가 누락된 요청 시 400 에러와 누락 필드 목록이 반환되는지 확인합니다."""
-    # 먼저 브랜드를 생성합니다.
-    client.post(f"/{NS}/bentz", data={})
-
-    # name 과 price 를 빠뜨린 불완전한 요청
-    incomplete_model = {
-        "fuel_type": "gasoline",
-        "fuel_efficiency": "9.1~13.2km/l",
-        "engine_power": "367hp",
-        "engine_cylinder": "I6"
-    }
-
-    response = client.post(f"/{NS}/bentz/0", json=incomplete_model)
+    """필수 필드 누락 시 K8s Status Failure 형식으로 400이 반환되는지 확인합니다."""
+    client.post(f"{NS}/", json={"name": "bentz"})
+    response = client.post(f"{NS}/bentz/models", json={"model_id": 0, "name": "e-class"})
     assert response.status_code == 400
     data = response.get_json()
-    assert 'message' in data
-    assert 'name' in data['message']
-    assert 'price' in data['message']
+    assert data['kind'] == 'Status'
+    assert data['status'] == 'Failure'
+
+
+def test_get_model(client):
+    """모델 생성 후 조회 시 K8s Model 형식으로 응답되는지 확인합니다."""
+    client.post(f"{NS}/", json={"name": "bentz"})
+    model = {"model_id": 0, "name": "e-class", "price": 1000000,
+             "fuel_type": "gasoline", "fuel_efficiency": "9.1~13.2km/l",
+             "engine_power": "367hp", "engine_cylinder": "I6"}
+    client.post(f"{NS}/bentz/models", json=model)
+    response = client.get(f"{NS}/bentz/models/0")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data['kind'] == 'Model'
+    assert data['data']['name'] == 'e-class'
+
+
+def test_get_model_list(client):
+    """모델 목록 조회 시 K8s ModelList 형식으로 응답되는지 확인합니다."""
+    client.post(f"{NS}/", json={"name": "bentz"})
+    model = {"model_id": 0, "name": "e-class", "price": 1000000,
+             "fuel_type": "gasoline", "fuel_efficiency": "9.1~13.2km/l",
+             "engine_power": "367hp", "engine_cylinder": "I6"}
+    client.post(f"{NS}/bentz/models", json=model)
+    response = client.get(f"{NS}/bentz/models")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data['kind'] == 'ModelList'
+    assert data['metadata']['total'] == 1
+    assert len(data['items']) == 1
+
+
+def test_pagination(client):
+    """페이지네이션 시 metadata에 total/page/size가 포함되는지 확인합니다."""
+    for name in ['brand_a', 'brand_b', 'brand_c']:
+        client.post(f"{NS}/", json={"name": name})
+    response = client.get(f"{NS}/?page=1&size=2")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data['metadata']['total'] == 3
+    assert data['metadata']['page'] == 1
+    assert data['metadata']['size'] == 2
+    assert len(data['items']) == 2
