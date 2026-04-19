@@ -5,16 +5,16 @@
   "features": [
     {
       "id": "feat-001",
-      "name": "첫 번째 기능",
-      "description": "이 기능이 무엇을 하는지 명확하게 설명하세요.",
+      "name": "2_cars_api K8s REST API 리팩터링",
+      "description": "기존 /cars/ 네임스페이스를 /api/v1/brands/ 로 변경하고, 응답 형식을 Kubernetes 스타일(apiVersion/kind/metadata/items)로 통일. 브랜드/모델 생성 시 이름을 URL 대신 body로 수신.",
       "priority": "high",
       "passes": true,
       "notes": "2_cars_api K8s 리팩터링 완료. pytest 12 passed"
     },
     {
       "id": "feat-002",
-      "name": "두 번째 기능",
-      "description": "이 기능이 무엇을 하는지 명확하게 설명하세요.",
+      "name": "4_opensearch_cars_api 신규 구현",
+      "description": "OpenSearch 백엔드 기반 K8s 스타일 자동차 API. 브랜드/모델 CRUD + 전체 텍스트 검색(multi_match) + Jinja2 프론트엔드(/ui/). 모듈화 구조(opensearch_client, routes/, templates/).",
       "priority": "medium",
       "passes": true,
       "notes": "4_opensearch_cars_api 신규 구현 완료. pytest 15 passed"
