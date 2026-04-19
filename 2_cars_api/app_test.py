@@ -96,3 +96,24 @@ def test_pagination(client):
     assert response.status_code == 200
     data = response.get_json()
     assert len(data['car_info']) == 1
+
+
+def test_create_model_missing_fields(client):
+    """필수 필드가 누락된 요청 시 400 에러와 누락 필드 목록이 반환되는지 확인합니다."""
+    # 먼저 브랜드를 생성합니다.
+    client.post(f"/{NS}/bentz", data={})
+
+    # name 과 price 를 빠뜨린 불완전한 요청
+    incomplete_model = {
+        "fuel_type": "gasoline",
+        "fuel_efficiency": "9.1~13.2km/l",
+        "engine_power": "367hp",
+        "engine_cylinder": "I6"
+    }
+
+    response = client.post(f"/{NS}/bentz/0", json=incomplete_model)
+    assert response.status_code == 400
+    data = response.get_json()
+    assert 'message' in data
+    assert 'name' in data['message']
+    assert 'price' in data['message']

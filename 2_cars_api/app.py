@@ -142,8 +142,18 @@ class CarsBrandModel(Resource):
         if model_id in car_info[brand]:
             return {'message': f'모델 ID {model_id}가 이미 존재합니다'}, 409
 
-        # 요청 바디(JSON)에서 차량 정보를 읽어 저장합니다.
+        # 요청 바디(JSON)에서 차량 정보를 읽어옵니다.
         params = request.get_json()
+
+        # 필수 필드 목록입니다. 하나라도 없으면 400 에러를 반환합니다.
+        required_fields = ["name", "price", "fuel_type",
+                           "fuel_efficiency", "engine_power", "engine_cylinder"]
+
+        # 리스트 컴프리헨션: required_fields 중 params에 없는 것만 골라냅니다.
+        missing = [field for field in required_fields if field not in params]
+        if missing:
+            return {'message': f'필수 항목이 누락되었습니다: {missing}'}, 400
+
         car_info[brand][model_id] = params
 
         return {'message': 'created'}, 201
