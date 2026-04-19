@@ -157,3 +157,13 @@ def test_pagination(client):
     assert data['metadata']['page'] == 1
     assert data['metadata']['size'] == 2
     assert len(data['items']) == 2
+
+
+def test_put_brand_not_implemented(client):
+    """PUT 브랜드(이름 변경)는 미구현 기능으로 501이 반환되는지 확인합니다."""
+    client.post(f"{NS}/", json={"name": "bentz"})
+    response = client.put(f"{NS}/bentz", json={"name": "mercedes"})
+    assert response.status_code == 501
+    data = response.get_json()
+    assert data['kind'] == 'Status'
+    assert data['code'] == 501
