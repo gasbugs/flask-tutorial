@@ -34,6 +34,15 @@ services: # 컨테이너 목록입니다!
       - 9600:9600 # 성능 분석기
     networks:
       - opensearch-net # 모든 컨테이너가 동일한 Docker 브리지 네트워크에 참여합니다
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: localhost:24224
+        fluentd-async: "true"
+        tag: docker.{{.Name}}
+    depends_on:
+      - fluent-bit
+
   opensearch-node2:
     image: opensearchproject/opensearch:latest # 문제를 피하기 위해 opensearch-node1과 동일한 이미지를 사용해야 합니다
     container_name: opensearch-node2
@@ -58,6 +67,15 @@ services: # 컨테이너 목록입니다!
       - opensearch-data2:/usr/share/opensearch/data
     networks:
       - opensearch-net
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: localhost:24224
+        fluentd-async: "true"
+        tag: docker.{{.Name}}
+    depends_on:
+      - fluent-bit
+
   opensearch-node3:
     image: opensearchproject/opensearch:latest # 문제를 피하기 위해 opensearch-node1과 동일한 이미지를 사용해야 합니다
     container_name: opensearch-node3
@@ -82,6 +100,15 @@ services: # 컨테이너 목록입니다!
       - opensearch-data3:/usr/share/opensearch/data
     networks:
       - opensearch-net
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: localhost:24224
+        fluentd-async: "true"
+        tag: docker.{{.Name}}
+    depends_on:
+      - fluent-bit
+
   opensearch-dashboards:
     image: opensearchproject/opensearch-dashboards:latest # opensearch-dashboards의 버전이 다른 노드에 설치된 opensearch의 버전과 일치하는지 확인하세요
     container_name: opensearch-dashboards
@@ -93,10 +120,21 @@ services: # 컨테이너 목록입니다!
       OPENSEARCH_HOSTS: '["https://opensearch-node1:9200","https://opensearch-node2:9200","https://opensearch-node3:9200"]' # OpenSearch Dashboards가 쿼리할 OpenSearch 노드를 정의합니다
     networks:
       - opensearch-net
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: localhost:24224
+        fluentd-async: "true"
+        tag: docker.{{.Name}}
+    depends_on:
+      - fluent-bit
 
   fluent-bit:
     image: fluent/fluent-bit:latest
     container_name: fluent-bit
+    ports:
+      - "24224:24224"
+      - "24224:24224/udp"
     volumes:
       - ./fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
       - ./fluent-bit/parsers.conf:/fluent-bit/etc/parsers.conf:ro
