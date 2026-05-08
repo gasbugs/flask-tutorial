@@ -20,7 +20,7 @@ class CarsClient:
         # OpenSearch 서버에 연결합니다 (개발용 자체 서명 인증서 검증 생략)
         self._os = OpenSearch(
             hosts=[{"host": "127.0.0.1", "port": 9200}],
-            http_auth=("admin", "TeSt432!23$#"),
+            http_auth=("admin", "TeSt432!23\\$#"),
             use_ssl=True,
             verify_certs=False,
             ssl_show_warn=False

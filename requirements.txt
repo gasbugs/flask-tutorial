@@ -9,3 +9,10 @@ opensearch-py>=3.0.0
 
 # 테스트 프레임워크
 pytest>=7.4.0
+
+# 코드 스타일 검사 및 포맷터
+flake8 
+black 
+isort 
+mypy 
+python-dotenv  

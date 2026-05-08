@@ -16,7 +16,7 @@ from opensearchpy import OpenSearch  # OpenSearch Python 클라이언트 라이�
 # http_auth: (사용자명, 비밀번호) 형태로 인증 정보를 전달합니다.
 client = OpenSearch(
     hosts=[{"host": "127.0.0.1", "port": 9200}],
-    http_auth=("admin", "TeSt432!23$#"),
+    http_auth=("admin", "TeSt432!23\\$#"),
     use_ssl=True,
     verify_certs=False,
     ssl_show_warn=False

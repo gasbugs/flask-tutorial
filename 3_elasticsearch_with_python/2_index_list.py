@@ -10,7 +10,7 @@ from opensearchpy import OpenSearch  # OpenSearch Python 클라이언트
 # OpenSearch 서버에 연결합니다.
 client = OpenSearch(
     hosts=[{"host": "127.0.0.1", "port": 9200}],
-    http_auth=("admin", "TeSt432!23$#"),
+    http_auth=("admin", "TeSt432!23\\$#"),
     use_ssl=True,
     verify_certs=False,
     ssl_show_warn=False
